@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sonitrol CORE Panel & Enclosure Tool</title>
+  <style>
+    :root {
+      --bg: #f4f7f9;
+      --card-bg: #fff;
+      --text: #333;
+      --header-bg: #e0e0e0;
+      --button-bg: #e91e63;
+      --button-hover: #c2185b;
+      --highlight: #e0f7fa;
+    }
+    .dark-mode {
+      --bg: #121212;
+      --card-bg: #1e1e1e;
+      --text: #ddd;
+      --header-bg: #2a2a2a;
+      --button-bg: #bb86fc;
+      --button-hover: #985eff;
+      --highlight: #37474f;
+    }
+    body {
+      margin: 0; padding: 20px;
+      display: flex; font-family: Arial, sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    .container {
+      flex: 1; max-width: 900px; margin-right: 20px;
+    }
+    h1 { text-align: center; margin-bottom: 20px; }
+    .toggle-theme {
+      position: absolute; right: 20px; top: 20px;
+      background: none; border: none; font-size: 20px;
+      color: var(--text); cursor: pointer;
+    }
+    .panel {
+      background: var(--card-bg);
+      border-radius: 6px; margin-bottom: 10px;
+      overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .panel-header {
+      display: flex; justify-content: space-between;
+      align-items: center; background: var(--header-bg);
+      padding: 10px 15px; cursor: pointer;
+    }
+    .panel-content { display: none; padding: 15px; }
+    .panel.open .panel-content { display: block; }
+    label { display: block; margin-bottom: 10px; }
+    select, input[type="text"] {
+      width: 100%; padding: 8px; margin-top: 4px;
+      border: 1px solid #ccc; border-radius: 4px;
+      background: var(--card-bg); color: var(--text);
+      transition: background 0.3s;
+    }
+    select:valid, input:valid { background: var(--highlight); }
+    .actions {
+      margin-top: 20px;
+      display: flex; flex-wrap: wrap; gap: 10px;
+    }
+    button {
+      background: var(--button-bg);
+      border: none; border-radius: 4px;
+      color: #fff; padding: 10px 14px;
+      font-size: 14px; cursor: pointer;
+      display: inline-flex; align-items: center;
+      gap: 6px; transition: background 0.3s;
+    }
+    button:hover { background: var(--button-hover); }
+    .icon { font-size: 16px; }
+    #summary-container {
+      flex: 0 0 320px; position: sticky; top: 20px;
+      background: var(--card-bg); border-radius: 6px;
+      padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      max-height: calc(100vh - 40px); overflow-y: auto;
+    }
+    #summary { white-space: pre-wrap; margin-top: 10px; }
+    @media (max-width: 900px) {
+      body { flex-direction: column; }
+      .container, #summary-container {
+        width: 100%; margin-right: 0;
+      }
+      #summary-container {
+        margin-top: 20px; position: relative; top: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <button class="toggle-theme" onclick="toggleTheme()">🌓</button>
+  <div class="container">
+    <h1>Sonitrol CORE Panel & Enclosure Tool</h1>
+    <form id="configForm">
+      <div id="enclosuresContainer"></div>
+      <div id="panelsContainer"></div>
+      <div class="actions">
+        <button type="button" onclick="resetForm()"><span class="icon">🔄</span>Reset Form</button>
+        <button type="button" onclick="exportSummary()"><span class="icon">📄</span>Export Summary</button>
+        <button type="button" onclick="exportPartsList()"><span class="icon">📋</span>Export Parts List</button>
+        <button type="button" onclick="addEnclosure()"><span class="icon">➕</span>Add Enclosure</button>
+        <button type="button" onclick="addNewPanel(currentPanelIndex)"><span class="icon">➕</span>Add Device</button>
+      </div>
+    </form>
+  </div>
+  <div id="summary-container">
+    <h2>Summary</h2>
+    <pre id="summary"></pre>
+  </div>
+
+  <script>
+    const bodyEl = document.body;
+    const theme = localStorage.getItem('theme') || 'light';
+    bodyEl.classList.toggle('dark-mode', theme==='dark');
+    function toggleTheme() {
+      const next = bodyEl.classList.toggle('dark-mode');
+      localStorage.setItem('theme', next?'dark':'light');
+    }
+
+    let currentPanelIndex = 1, enclosureIndex = 1;
+    const panelTypes = ["S-S1000-PCB-32GB","S-SD1-REMIO-PCB","S-SD1-AUDIO8-PCB","S-SD1-CRIO-PCB","KEYPAD"];
+    function togglePanel(e) { e.target.closest('.panel').classList.toggle('open'); }
+
+    function createAccordion(title) {
+      const panel = document.createElement('div'),
+            header = document.createElement('div'),
+            content = document.createElement('div');
+      panel.className='panel';
+      header.className='panel-header';
+      content.className='panel-content';
+      header.innerHTML = `<span>${title}</span>`;
+      header.addEventListener('click', togglePanel);
+      panel.append(header, content);
+      return { panel, content };
+    }
+
+    function addEnclosure() {
+      const { panel, content } = createAccordion(`Enclosure ${enclosureIndex}`);
+      panel.id = `enclosure${enclosureIndex}`;
+      content.innerHTML = `
+        <label>Enclosure Type:
+          <select name="enclosureType${enclosureIndex}" required onchange="updateSummary()">
+            <option value="">-- Select --</option>
+            <option value="S-CORE-ENCL">S-CORE-ENCL</option>
+            <option value="SONIP18 w/ Backplate">SONIP18 w/ Backplate</option>
+            <option value="Legacy Enclosure w Backplate">Legacy Enclosure w Backplate</option>
+          </select>
+        </label>
+        <button type="button" onclick="removeEnclosure(${enclosureIndex})"><span class="icon">🗑️</span>Remove Enclosure</button>`;
+      document.getElementById('enclosuresContainer').appendChild(panel);
+      enclosureIndex++;
+    }
+
+    function removeEnclosure(i) {
+      document.getElementById(`enclosure${i}`)?.remove();
+      updateSummary();
+    }
+
+    function addNewPanel(i) {
+      const { panel, content } = createAccordion(`Device ${i}`);
+      panel.id = `devicePanel${i}`;
+      const isFirst = i===1;
+      content.innerHTML = `
+        <label>Panel Type:
+          <select name="panelType${i}" id="panelType${i}" required onchange="renderExpansions(${i}); updateSummary()">
+            <option value="">-- Select --</option>
+            ${panelTypes.filter(t=>isFirst?t==="S-S1000-PCB-32GB":t!=="S-S1000-PCB-32GB")
+                          .map(t=>`<option value="${t}">${t}</option>`).join('')}
+          </select>
+        </label>
+        <label>Location:
+          <input type="text" name="location${i}" placeholder="Enter location" required onchange="updateSummary()"/>
+        </label>
+        ${!isFirst?`
+        <label>BUS:
+          <select name="bus${i}" required onchange="updateSummary()">
+            <option value="">-- Select --</option>
+            <option value="BUS1">BUS1</option>
+            <option value="BUS2">BUS2</option>
+          </select>
+        </label>`:''}
+        <div id="expansions${i}"></div>
+        <button type="button" onclick="removePanel(${i})"><span class="icon">🗑️</span>Remove Device</button>`;
+      document.getElementById('panelsContainer').appendChild(panel);
+      currentPanelIndex++;
+    }
+
+    function removePanel(i) {
+      document.getElementById(`devicePanel${i}`)?.remove();
+      updateSummary();
+    }
+
+    function renderExpansions(i) {
+      const type = document.getElementById(`panelType${i}`).value;
+      const cont = document.getElementById(`expansions${i}`);
+      cont.innerHTML = '';
+      if (type==='KEYPAD') {
+        cont.innerHTML = `
+          <label>Keypad Model:
+            <select name="keypadModel${i}" required onchange="updateSummary()">
+              <option value="">-- Select --</option>
+              <option value="S-SD1-TKD-B">S-SD1-TKD-B</option>
+              <option value="S-SD1-TKD-PRX-B">S-SD1-TKD-PRX-B</option>
+              <option value="S-SD1-TKD-MFRICP-B">S-SD1-TKD-MFRICP-B</option>
+            </select>
+          </label>`;
+      } else if (type==='S-SD1-AUDIO8-PCB') {
+        cont.innerHTML = `
+          <label>Expansion 1:
+            <select name="expansion${i}_0" onchange="updateSummary()"><option value="">-- None --</option><option value="S-SE1-AUDIO8-PCB">S-SE1-AUDIO8-PCB</option></select>
+          </label>
+          <label>Expansion 2:
+            <select name="expansion${i}_1" onchange="updateSummary()"><option value="">-- None --</option><option value="S-SE1-6OUT-PCB">S-SE1-6OUT-PCB</option><option value="S-SE1-8I2O-PCB">S-SE1-8I2O-PCB</option></select>
+          </label>`;
+      } else if (type!=='S-SD1-CRIO-PCB') {
+        for (let j=0;j<3;j++) cont.innerHTML += `
+          <label>Expansion ${j+1}:
+            <select name="expansion${i}_${j}" onchange="updateSummary()">
+              <option value="">-- None --</option>
+              <option value="S-SE1-8I2O-PCB">S-SE1-8I2O-PCB</option>
+              <option value="S-SE1-6OUT-PCB">S-SE1-6OUT-PCB</option>
+              <option value="S-SE1-CRI-PCB">S-SE1-CRI-PCB</option>
+              <option value="S-SE1-AUDIO-PCB">S-SE1-AUDIO-PCB</option>
+              <option value="S-SE1-485">S-SE1-485</option>
+              <option value="S-SE1-CELL-PCB-L">S-SE1-CELL-PCB-L</option>
+              <option value="S-SE1-AUDIO8-PCB">S-SE1-AUDIO8-PCB</option>
+            </select>
+          </label>`;
+      }
+    }
+
+    function updateSummary() {
+      const fd = new FormData(document.getElementById('configForm'));
+      const lines = [];
+      const encls = [];
+      for (let i=1; i<enclosureIndex; i++) {
+        const enc = fd.get(`enclosureType${i}`);
+        if (enc) encls.push(`Enclosure ${i}: ${enc}`);
+      }
+      if (encls.length) lines.push(`ENCLOSURES:\n${encls.join('\n')}`);
+
+      const ioMap = {
+        "S-S1000-PCB-32GB":{inputs:8,outputs:2,readers:2,audioZones:0},
+        "S-SD1-REMIO-PCB":{inputs:8,outputs:2,readers:2,audioZones:0},
+        "S-SD1-AUDIO8-PCB":{inputs:8,outputs:2,readers:0,audioZones:8},
+        "S-SD1-CRIO-PCB":{inputs:0,outputs:0,readers:2,audioZones:0},
+        "S-SE1-8I2O-PCB":{inputs:8,outputs:2,readers:0,audioZones:0},
+        "S-SE1-6OUT-PCB":{inputs:0,outputs:6,readers:0,audioZones:0},
+        "S-SE1-CRI-PCB":{inputs:0,outputs:0,readers:2,audioZones:0},
+        "S-SE1-AUDIO-PCB":{inputs:0,outputs:0,readers:0,audioZones:0},
+        "S-SE1-485":{inputs:0,outputs:0,readers:0,audioZones:0},
+        "S-SE1-CELL-PCB-L":{inputs:0,outputs:0,readers:0,audioZones:0},
+        "S-SE1-AUDIO8-PCB":{inputs:0,outputs:0,readers:0,audioZones:8}
+      };
+
+      let totI=0, totO=0, totR=0, totA=0;
+      for (let i=1; i<currentPanelIndex; i++){
+        const type=fd.get(`panelType${i}`), loc=fd.get(`location${i}`)||'N/A', bus=fd.get(`bus${i}`)||'N/A', kp=fd.get(`keypadModel${i}`);
+        if (!type && loc==='N/A' && bus==='N/A' && !kp) continue;
+        lines.push(`\nDevice ${i}\n- Panel Type: ${type||'N/A'}\n- Location: ${loc}\n- BUS: ${bus}`);
+        let iC=ioMap[type]?.inputs||0, oC=ioMap[type]?.outputs||0, rC=ioMap[type]?.readers||0, aC=ioMap[type]?.audioZones||0;
+        for (let j=0; j<3; j++){
+          const exp=fd.get(`expansion${i}_${j}`);
+          if (exp){
+            lines.push(`  Expansion ${j+1}: ${exp}`);
+            iC+=ioMap[exp]?.inputs||0; oC+=ioMap[exp]?.outputs||0; rC+=ioMap[exp]?.readers||0; aC+=ioMap[exp]?.audioZones||0;
+          }
+        }
+        if (kp) lines.push(`  Keypad Model: ${kp}`);
+        totI+=iC; totO+=oC; totR+=rC; totA+=aC;
+      }
+      lines.push(`\nTOTALS:\n- Inputs: ${totI}\n- Outputs: ${totO}\n- Potential Wiegand Readers: ${totR}\n- Audio Zones: ${totA}`);
+      document.getElementById('summary').textContent = lines.join('\n');
+    }
+
+    function exportPartsList() {
+      const fd = new FormData(document.getElementById('configForm'));
+      const rows=[['Part Number','Type']];
+      for (let i=1; i<currentPanelIndex; i++){
+        const type=fd.get(`panelType${i}`);
+        if (!type) continue;
+        rows.push([type,'Panel']);
+        if (['S-S1000-PCB-32GB','S-SD1-REMIO-PCB'].includes(type)) rows.push(['S-0E-PPS24V2AS','Power Supply']);
+        for (let j=0; j<3; j++){
+          const exp=fd.get(`expansion${i}_${j}`);
+          if (exp) rows.push([exp,'Expansion']);
+        }
+        const kp=fd.get(`keypadModel${i}`);
+        if (kp) rows.push([kp,'Keypad']);
+      }
+      for (let i=1; i<enclosureIndex; i++){
+        const enc=fd.get(`enclosureType${i}`);
+        if (enc) rows.push([enc,'Enclosure']);
+      }
+      const csv=rows.map(r => r.map(v=>`"${v.replace(/"/g,'""')}"`).join(',')).join('\r\n');
+      const blob=new Blob([csv],{type:'text/csv'}), link=document.createElement('a');
+      link.href=URL.createObjectURL(blob); link.download='Parts_List.csv'; link.click(); URL.revokeObjectURL(link.href);
+    }
+
+    function exportSummary() {
+      const text=document.getElementById('summary').textContent.trim();
+      if (!text) return alert('Nothing to export.');
+      const blob=new Blob([text],{type:'text/plain'}), link=document.createElement('a');
+      link.href=URL.createObjectURL(blob); link.download='Sonitrol_Summary.txt'; link.click(); URL.revokeObjectURL(link.href);
+    }
+
+    function resetForm() {
+      document.getElementById('panelsContainer').innerHTML='';
+      document.getElementById('enclosuresContainer').innerHTML='';
+      document.getElementById('summary').textContent='';
+      currentPanelIndex=1; enclosureIndex=1;
+      addEnclosure(); addNewPanel(currentPanelIndex);
+    }
+
+    document.getElementById('configForm').addEventListener('change', updateSummary);
+    document.addEventListener('DOMContentLoaded',()=>{
+      addEnclosure(); addNewPanel(currentPanelIndex);
+    });
+  </script>
+</body>
+</html>
